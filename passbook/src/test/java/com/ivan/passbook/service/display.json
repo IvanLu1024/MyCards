@@ -1,0 +1,54 @@
+{
+  "data": {
+    "passTemplateInfos": [
+      {},
+      {
+        "merchants": {
+          "address": "北京市海淀区",
+          "businessLicenseUrl": "www.qq.com",
+          "id": 3,
+          "isAudit": true,
+          "logoUrl": "www.baidu.com",
+          "name": "小鹿",
+          "phone": "13355645684"
+        },
+        "passTemplate": {
+          "background": 2,
+          "desc": "详情：请点击查看",
+          "end": 1558540800000,
+          "hasToken": false,
+          "id": 3,
+          "limit": 10000,
+          "start": 1556812800000,
+          "summary": "简介: SEU",
+          "title": "午餐券-1"
+        }
+      },
+      {
+        "merchants": {
+          "address": "北京市海淀区",
+          "businessLicenseUrl": "www.qq.com",
+          "id": 3,
+          "isAudit": true,
+          "logoUrl": "www.baidu.com",
+          "name": "小鹿",
+          "phone": "13355645684"
+        },
+        "passTemplate": {
+          "background": 2,
+          "desc": "详情：请点击查看",
+          "end": 1558627200000,
+          "hasToken": false,
+          "id": 3,
+          "limit": 10000,
+          "start": 1556899200000,
+          "summary": "简介: SEU剧院cat",
+          "title": "晚餐券"
+        }
+      }
+    ],
+    "userId": 190756
+  },
+  "errorCode": 0,
+  "errorMsg": ""
+}

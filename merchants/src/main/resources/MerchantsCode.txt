@@ -1,0 +1,48 @@
+需要启动的服务:
+    hbase, mysql, kafka, redis
+需要清空的数据:
+     1. HBase的四张表:truncate 'pb:passtemplate' 等
+     2. MySQL商户数据:delete from merchants;
+     3. token数据:删除/tmp/token下的所有文件
+     4. redis 的数据:flushall
+
+1. 创建商户 -- 商户 id 7
+    POST: 127.0.0.1:9527/merchants/create
+    header: token/ivan-passbook-merchants
+    {
+        "name": "慕课网",
+        "logoUrl": "www.imooc.com",
+        "businessLicenseUrl": "www.imooc.com",
+        "phone": "1234567890",
+        "address": "北京市海淀区"
+    }
+
+2. 查看商户信息
+    GET: 127.0.0.1:9527/merchants/7
+    header: token/ivan-passbook-merchants
+
+3. 投放优惠券
+    POST: 127.0.0.1:9527/merchants/drop
+    header: token/ivan-passbook-merchants
+    {
+            "background": 1,
+            "desc": "慕课网优惠券",
+            "end": "2019-06-30",
+            "hasToken": false,
+            "id": 7,
+            "limit": 1000,
+            "start": "2018-06-01",
+            "summary": "优惠券简介",
+            "title": "Ivan优惠券-1"
+        }
+    {
+            "background": 1,
+            "desc": "慕课网优惠券",
+            "end": "2019-06-30",
+            "hasToken": true,
+            "id": 7,
+            "limit": 1000,
+            "start": "2018-06-01",
+            "summary": "优惠券简介",
+            "title": "Ivan优惠券-2"
+        }

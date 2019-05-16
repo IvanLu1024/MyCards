@@ -1,6 +1,6 @@
-# MyCards
+# :credit_card:MyCards
 
-这是一款仿微信卡包的个人项目，用于个人学习交流分享
+这是一款仿小米卡包的个人项目，用于个人学习交流分享
 
 ## 一、技术栈
 
@@ -12,7 +12,15 @@
 
 ## 二、系统架构
 
-该应用分为**商户子系统(merchants)**和**用户子系统(passbook)**两个部分，
+该应用分为**商户子投放系统**和**用户应用子系统**两个部分，
+
+- 商户投放子系统（商户开放平台）：提供给商户注册和投放优惠券的功能，并且需要对商户进行校验以免非法攻击；
+- 用户应用子系统：提供给用户领取优惠券、使用优惠券、查看优惠券和反馈用户意见等功能。
+
+代码结构：
+
+- [商户投放子系统（merchants）](https://github.com/IvanLu1024/MyCards/blob/master/merchants/)
+- [用户应用子系统（passbook）](https://github.com/IvanLu1024/MyCards/blob/master/passbook/)
 
 架构图如下图所示：
 
@@ -30,7 +38,7 @@
 
 ## 四、环境配置教程
 
-[查看详细]()
+[查看详细](https://github.com/IvanLu1024/MyCards/blob/master/notes/环境配置.md)
 
 ## 五、测试教程
 
@@ -42,6 +50,12 @@
 - [SpringBoot]()
 - [Redis]()
 - [HBase]()
+
+## 七、踩坑记录
+
+[查看详细](https://github.com/IvanLu1024/MyCards/blob/master/notes/踩坑记录.md)
+
+> 继续完善中……
 
 ## 参考资料
 

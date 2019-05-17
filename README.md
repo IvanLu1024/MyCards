@@ -49,7 +49,7 @@
 - [MySQL]()
 - [SpringBoot]()
 - [Redis]()
-- [HBase]()
+- [HBase](https://github.com/IvanLu1024/MyCards/blob/master/notes/HBase.md)
 
 ## 七、踩坑记录
 

@@ -153,7 +153,21 @@ HLog和MemStore 构成了Level 0，保证了数据的高可用和性能的低延
 
 StoreFile 和HFile 构成了Level 1，实现了不可靠数据的持久化，真正地将HBase变成了高可用的数据库系统。
 
-## 3.3 HFile 解析
+## 3.3 Region 解析
+
+每个一个Region 都会存储在一个确定的Region Server上，数据之间是互斥的关系。HBase表在行键上分割为多个Region，**它是HBae中分布式存储和负载均衡的最小单元，但不是存储的最小单元。**Region 按照大小切分，每个表一行只有一个Region ，一行数据不可能分布在多个Region 上。当不断插入导致列族到达阈值之后，Region 会被水平拆分为两个Region 。Region 在Region Server的运行过程中可能出现移动，这是Master的负载均衡策略或者因为出现宕机。Region 是用户和Region Server交互的实际载体，每个Region 都有三个信息来标识：
+
+- Table Name（表名）
+- Start RowKey（起始的RowKey）
+- Create Time（创建时间）
+
+<div align="center">
+  <img src="https://ws1.sinaimg.cn/mw690/b7cbe24fly1g35hmy8xkjj20l70dpmzz.jpg"/>
+</div>
+
+Region 的拆分过程是：先该当前Region 下线，然后对其进行拆分，接着将子Region 加入到Meta的元信息中，再加入原Region Server上，最后同步到Master上。
+
+## 3.4 HFile 解析
 
 HBase实际以HFile的形式保存在HDFS上。
 
@@ -176,7 +190,7 @@ KeyType的作用，对于HBase中的删除操作，由于HFile一旦刷写成功
   <img src="https://ws1.sinaimg.cn/mw690/b7cbe24fly1g34bzmz8bqj219j0id49b.jpg"/>
 </div>
 
-## 3.4 WAL 解析
+## 3.5 WAL 解析
 
 HBase的日志系统，WAL即预写日志：
 
@@ -201,7 +215,7 @@ WAL是通过HLog实例进行实现的，HLog是使用append方法，对日志进
 - HLogSyncer：日志同步刷写类，有定时刷写和内存溢值两种工作方式。
 - HLogRoller：Log的大小可以通过配置文件进行设置，默认是一个小时，每经过一个小时生成一个新的Log文件。当一定时间后，就有大量的日志文件。HLogRoller是在特定的时间滚动日志生成新的日志文件，避免了单个日志文件过大。根据序列化的number对比时间，删除旧的不需要的日志文件。
 
-## 3.5 Compaction 解析
+## 3.6 Compaction 解析
 
 Compaction 会从Region Store中选择一些HFile文件进行合并，合并就是指将一些待合并的文件中的K-V对进行排序重新生成一个新的文件取代原来的待合并的文件。由于系统不断地进行刷写会产生大量小文件，这样不利于数据查找。那么将这些小文件合并成一些大文件，这样使得查找过程的I/O次数减少，提高了查找效率。其中可以分为以下两类：
 
@@ -218,9 +232,56 @@ HBase中Compaction的触发时机的因素很多，最主要的有三种：
 - 后台线程周期性的检查：Compaction Checker会定期触发检查是否需要合并，这个线程会优先检查文件数是否大于阈值，一旦大于就会触发合并，若不满足会继续检查是否满足MajorCompaction。简单来说，就是如果当前Store中最早更新时间早于某个值，这个值成为mc time，就会触发大的合并，HBase通过这种方式来删除过期的数据，其浮动区间为[7-7 * 0.2, 7+7 * 0.2]。默认在七天会进行一次大合并（MajorCompaction）。
 - 手动触发：通常是为了执行MajorCompaction，因为很多业务担心自动的MajorCompaction会影响性能，会选择在低峰期手动触发；还可能用户在进行完alter操作以后，希望立即生效；管理员在发现硬盘容量不够的时候会手动触发，这样可以删除大量的过期数据。
 
+# 四、数据存取解析
 
+## 4.1 数据存取流程解析
 
+数据存储(客户端)：
 
+提交之前会先请求Zookeeper来确定Meta表（元数据表）所在的Region Server的地址，再根据RowKey确定归属的Region Server，之后用户提交Put/Delete这样的请求，HBase客户端会将Put请求添加到本地的buffer中，符合一定的条件就会通过异步批量提交。HBase默认设置auto flush（自动刷写）为true，表示put请求会直接提交给服务器进行处理，用户可以设置auto flush为false，这样put请求会首先放入本地的buffer中，等到buffer的大小达到一定阈值（默认是2M）后再提交。
+
+<div align="center">
+  <img src="https://ws1.sinaimg.cn/mw690/b7cbe24fly1g35hw8y2p1j20kb0ckq4j.jpg"/>
+</div>
+
+数据存储（服务器）：
+
+当数据到达Region Server的某个Region后，首先获取RowLock（行锁），之后再日志和写入缓存，此时并不会同步日志，操作完释放行锁，随后再将同步（sync）到HDFS上，如果同步失败进行回滚操作将缓存中已写入的数据删除掉，代表插入失败。当缓存达到一定阈值（默认是64M）后，启动异步线程将数据刷写到硬盘上形成多个StoreFile，当StoreFile数量达到一定阈值后会触发合并操作。当单个StoreFile的大小达到一定大小的时候会触发一个split操作，将当前的Region切分为两个Region，再同步到Mater上，原有Region会下线，子Region会被Master分配到相应的Region Server上。
+
+<div align="center">
+  <img src="https://ws1.sinaimg.cn/mw690/b7cbe24fly1g35igfraixj20ux0auwit.jpg"/>
+</div>
+
+数据获取（客户端）：
+
+这里同数据存储的过程是类似的。
+
+<div align="center">
+  <img src="https://ws1.sinaimg.cn/mw690/b7cbe24fly1g35iiaibggj20kl0c275w.jpg"/>
+</div>
+
+数据获取（服务器）：
+
+Region Server在接收到客户端的Get/Scan请求之后，首先HBase在确定的Region Server上构造一个RegionScanner准备为当前定位的Scan做检索，RegionScanner会根据列族构建StoreScanner，有多少个列族就会构建多少个StoreScanner。每个StoreScanner会为当前Store中的每个HFile构建一个StoreFileScanner，用于实际执行对应的文件检索。同时会对对应的Mem构建对应的MemStoreScanner，用于检索MemStore中的数据。构建两类Scanner的原因在于，数据可能还没有完全刷写到硬盘上，部分数据还存储于内存之中。检索完之后，就能够找到对应的K-V，再经过简单地封装就形成了ResultSet，就可以直接返回给客户端。
+
+<div align="center">
+  <img src="https://ws1.sinaimg.cn/mw690/b7cbe24fly1g35iv23cpfj20yc0fewjs.jpg"/>
+</div>
+
+## 4.2 数据存取优化
+
+存储优化：
+
+HBase通过MemStore和WAL两种机制，实现数据顺序快速的插入，极大降低了数据存储的延迟。
+
+检索（获取）优化：
+
+HBase使用布隆过滤器来提高**随机读**的性能，布隆过滤器是列族级别的配置。HBase中的每个HFile都有对应的位数组，K-V在写入HFile时，会经过几个哈希函数的映射并写入对应的位数组里面。HFile中的位数组，就是布隆过滤器中存储的值。HFile越大位数组也会越大，太大就不适合放入内存中了，因此HFile将位数组以RowKey进行了拆分，一部分连续的RowKey使用一个位数组。因此HFile会有多个位数组，在查询的时候，首先会定位到某个位数组再将该位数组加载到内存中进行过滤就行，这样减少了内存的开支。
+
+HBase中存在两种布隆过滤器：
+
+- Row：根据RowKey来过滤StoreFile，这种情况可以针对列族和列都相同，只有RowKey不同的情况；
+- RowCol：根据RowKey+ColumnQualifier（列描述符）来过滤StoreFile，这种情况是针对列族相同，列和RowKey不同的情况。
 
 # 特点
 
@@ -231,6 +292,10 @@ HBase中Compaction的触发时机的因素很多，最主要的有三种：
 - 扩展性：底层依赖于HDFS，空间不够的时候只需要横向扩展即可；
 - 高可靠性：副本机制保证了数据的可靠性；
 - 高性能：写入性能高，底层使用LSM数据结构和RowKey有序排序等架构上的独特设计；读性能高，使用region切分、主键索引和缓存机制使得具备随机读取性能高。
+
+<div align="center">
+  <img src="https://ws1.sinaimg.cn/mw690/b7cbe24fly1g35ju61jgaj20r00butcu.jpg"/>
+</div>
 
 # 和关系型数据库的对比
 
@@ -243,3 +308,6 @@ HBase中Compaction的触发时机的因素很多，最主要的有三种：
 
 [HBase shell命令](https://www.cnblogs.com/ityouknow/p/7344001.html)
 
+# 参考资料
+
+<https://www.imooc.com/learn/996>

@@ -49,7 +49,7 @@
 存储
 
 - [MySQL]()
-- [Redis]()
+- [Redis](https://github.com/IvanLu1024/MyCards/blob/master/notes/redis.md)
 
 框架：
 

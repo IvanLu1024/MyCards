@@ -46,10 +46,20 @@
 
 ## 六、涉及技术和原理讲解
 
+存储
+
 - [MySQL]()
-- [SpringBoot]()
 - [Redis]()
+
+框架：
+
+- [SpringBoot]()
+
+分布式：
+
+- [Zookeeper](https://github.com/IvanLu1024/MyCards/blob/master/notes/zookeeper.md)
 - [HBase](https://github.com/IvanLu1024/MyCards/blob/master/notes/HBase.md)
+- [Kafka]()
 
 ## 七、踩坑记录
 

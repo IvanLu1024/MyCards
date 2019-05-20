@@ -190,6 +190,17 @@ Copy-on-write：
 - 主进程获取子进程重写AOF的完成信号，往新的AOF文件同步增量变动；
 - 使用新的AOF文件替换旧的AOF文件
 
+<div align="center">
+    <img src="https://gitee.com/IvanLu1024/picts/raw/cd8f6e3de316d3640c3a20bc4c7184ce9cdcbb1a/blog/redis/RDB-AOF00.png"/>
+</div>
+
+对于上图有几个关键点：
+
+- 在重写期间，由于主进程依然在响应命令，为了保证最终备份的完整性。因此它**依然会写入旧的AOF file中，如果重写失败，能够保证数据不丢失**。
+- 为了把重写期间响应的写入信息也写入到新的文件中，因此也会为子进程保留一个buf，防止新写的file丢失数据。
+- 重写是直接把当前内存的数据生成对应命令，并不需要读取老的AOF文件进行分析、命令合并。
+- AOF文件直接采用的文本协议，主要是兼容性好、追加方便、可读性高。
+
 RDB和AOF文件共存情况下的恢复流程
 
 <div align="center">
@@ -205,13 +216,9 @@ RDB和AOF的优缺点：
 
 3. RDB-AOF混合持久化方式
 
-在Redis 4.0之后推出了混合持久化方式，而且作为默认的配置方式。
+在Redis 4.0之后推出了混合持久化方式，而且作为默认的配置方式。先以RDB方式从管道写全量数据再使用AOF方式从管道追加。AOF文件先半段是RDB形式的全量数据，后半段是Redis命令形式的增量数据。
 
 - BGSAVE做镜像全量持久化，AOF做增量持久化。因为BGSAVE需要耗费大量的时间，不够实时，在停机的时候会造成大量数据丢失，这时需要AOF配合使用。在Redis实例重启的时候，会使用BGSAVE持久化文件重新构建内容，再使用AOF重放近期的操作指令，来实现完整恢复重启之前的状态。
-
-<div align="center">
-    <img src="https://gitee.com/IvanLu1024/picts/raw/6c97092eeda2cff929a894b248f681d4f6962bfa/blog/redis/20190520104856.png"/>
-</div>
 
 # 7. 使用Pineline的好处
 
@@ -291,3 +298,6 @@ Redis Sentinel（Redis哨兵）
     <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/redis/20190520155202.png"/>
 </div>
 
+# 参考资料
+
+https://coding.imooc.com/class/303.html

@@ -1,4 +1,4 @@
-# :credit_card:MyCards
+# :credit_card: MyCards
 
 这是一款仿小米卡包的个人项目，用于个人学习交流分享
 
@@ -59,7 +59,7 @@
 
 - [Zookeeper](https://github.com/IvanLu1024/MyCards/blob/master/notes/zookeeper.md)
 - [HBase](https://github.com/IvanLu1024/MyCards/blob/master/notes/HBase.md)
-- [Kafka]()
+- [Kafka](https://github.com/DuHouAn/Java-Notes/blob/master/BigData/Kafka.md)
 
 ## 七、踩坑记录
 

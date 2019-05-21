@@ -94,7 +94,11 @@ REPLICATION_SCOPE=>1},
 
 ## 2.3 元信息表（系统表）
 
-元信息表同样是一张hbase表，同样拥有RowKey和列族这样的概念。存储在region server上，位于zookeeper上，用户查询数据的时候，需要先到zookeeper上获取到meta表的数据再进行相应用户的查找。
+元信息表同样是一张hbase表，同样拥有RowKey和列族这样的概念。存储在region server上，位于zookeeper上，用户查询数据的时候，需要先到zookeeper上获取到meta表的region server的地址再到到相应region server上进行查找，如下图所示：
+
+<div align="center">
+  <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g341g2emeyj21c30jc7ep.jpg"/>
+</div>
 
 RowKey：格式化的region key
 
@@ -104,9 +108,8 @@ value：保存着region server的地址，其中最重要的一个列族就是in
 
 
 
-<div align="center">
-  <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g341g2emeyj21c30jc7ep.jpg"/>
-</div>
+
+
 
 
 
@@ -114,7 +117,7 @@ value：保存着region server的地址，其中最重要的一个列族就是in
 
 ## 3.1 HBase中的LSM存储思想
 
-LSM树：日志结构合并树，由两个或两个以上存储数据的结构组成的，每一个数据结构对应着自己的存储介质。
+LSM树（Log-Structured Merge-Trees）：日志结构合并树，由两个或两个以上存储数据的结构组成的，每一个数据结构对应着自己的存储介质。
 
 <div align="center">
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g343l9btcvj20x00ct0v4.jpg"/>
@@ -125,7 +128,7 @@ LSM树：日志结构合并树，由两个或两个以上存储数据的结构�
 - C0：所有数据均存储在内存
 - C1：所有数据均存储在磁盘之上
 
-当一条新的记录插入的时候，先从C0中插入，当达到C0的阈值以后，就将C0中的某些数据片段迁移到C1中并合并到C1树上。由于合并排序算法是批量的、并且是顺序存储的，所以速度十分快。
+当一条新的记录插入的时候，先从C0中插入，当达到C0的阈值以后，就将C0中的某些数据片段迁移到C1中并合并到C1树上。当C1层级达到阈值时，合并到C2层级。由于合并排序算法是批量的、并且是顺序存储的，所以写的速度十分快。这样层层合并，文件数量越来越少，文件变得越来越大。每个层级的数据都是排序的，合并的时候通过类似归并排序的算法实现快速排序。对于删除操作，仅仅将数据标记为已删除，合并的时候跳过已标记为删除的数据，达到物理删除的效果。
 
 LSM思想在HBase中的实现（三层存储结构）：
 
@@ -133,9 +136,9 @@ LSM思想在HBase中的实现（三层存储结构）：
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g343s2kwutj20rb0e4acs.jpg"/>
 </div>
 
-- Level 0：日志/内存，为了加速随机写的速度，先写入日志和内存中，其中日志是为了保障高可用。当达到阈值，会有异步线程将部分数据刷写到硬盘上；
-- Level 1：日志/内存；
-- Level 2：合并，由于不断地刷写会产生大量小文件，这样不利于管理和查询，需要在合适的时机启动线程进行合并操作会生成一个大文件（多路归并算法）。
+- Level 0：日志/内存，为了加速随机写的速度，先写入日志和内存中，其中日志是为了保障高可用。
+- Level 1：日志/内存，当达到阈值，会有异步线程将部分数据刷写到硬盘上；；
+- Level 2：合并，由于不断地刷写会产生大量小文件，这样不利于管理和查询，需要在合适的时机启动一个异步线程进行合并操作会生成一个大文件（多路归并算法）。
 
 ## 3.2 数据存储模块简介
 
@@ -145,7 +148,7 @@ RegionServer = Region + Store  + MemStore + StoreFile + HFile + HLog
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g34acdhpv0j20ub0hstfa.jpg"/>
 </div>
 
-- Region ：存储数据的最小单元，对于一个 RegionServer 可以包含很多Region，并且每一个Region 包含的数据都是互斥的，存储有用户各个行的数据。
+- Region ：分布式存储数据和负载均衡的最小单元，对于一个 RegionServer 可以包含很多Region，并且**每一个Region 包含的数据都是互斥的**，存储有用户各个行的数据。
 - Store  ：对应表中的列族。
 - MemStore ：是一个内存式的数据结构，用户数据进入Region 之后会先写入MemStore当满了之后 再刷写到StoreFile 中，在StoreFile 中将数据封装成HFile再刷写到HDFS上 。
 - HLog：对于一个RegionServer 只有一个HLog实例。
@@ -178,18 +181,19 @@ HFile文件是HBase存储数据的最基础形式，它的底层是Hadoop二进�
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g34aux2wiqj20pj0it7be.jpg"/>
 </div>
 
-- Scanned block section：在顺序扫描HFile的时候，这个部分的数据块将会被读取，用户数据存储于该部分。
+- Scanned block section：在顺序扫描HFile的时候，这个部分的数据块将会被读取，**用户数据存储于该部分**。
 - Nonscanned block section：在顺序扫描HFile的时候，这个部分的数据块将不会被读取。主要包含一些元数据，在访问用户数据的时候，该部分不会被扫描到。
 - Load-on-open section：当RegionServer 启动的时候，该部分数据会被加载到内存中，主要是HFile的一些元数据信息。
 - Trailer：记录了HFile的基本信息，各个部分的偏移量和寻址信息。
 
-Data Block：是HBase中最基础的存储单元，是实际存储用户的数据结构，存储的是K-V数据。
-
-KeyType的作用，对于HBase中的删除操作，由于HFile一旦刷写成功就不可做修改，正常插入是Put，Delete表示删除整行，DeleteColumn表示删除某一列，DeleteFamily表示删除某个列族。这就是给数据打上一个标记，称为“墓碑标记”，实际上标识数据被删除掉了。当再次扫描的时候，发现有“墓碑标记”的时候，就会在以后的某个时间点将对应的数据删除，并不是在插入的过程中就将其进行删除，这也是为了删除性能的高效性。
-
 <div align="center">
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g34bzmz8bqj219j0id49b.jpg"/>
 </div>
+
+Data Block：是HBase中最基础的存储单元，是实际存储用户的数据结构，**存储的是K-V数据**。
+
+KeyType的作用：对于HBase中的删除操作，由于HFile一旦刷写成功就不可做修改，正常插入是Put，Delete表示删除整行，DeleteColumn表示删除某一列，DeleteFamily表示删除某个列族。这就是给数据打上一个标记，称为“墓碑标记”，实际上标识数据被删除掉了。当再次扫描的时候，发现有“墓碑标记”的时候，就会**在以后的某个时间点将对应的数据删除，并不是在插入的过程中就将其进行删除，这也是为了删除性能的高效性**。
+
 
 ## 3.5 WAL 解析
 
@@ -201,7 +205,7 @@ HBase的日志系统，WAL即预写日志：
 
 其最重要的功能就是灾难恢复，解决了高可用，解决了远程备份。
 
-WAL是通过HLog实例进行实现的，HLog是使用append方法，对日志进行追加写的功能。WAL通过序列化的number去追踪数据的改变，其内部使用了AtimoicLong来保证线程安全。
+WAL是通过HLog实例进行实现的，HLog是使用append方法，对日志进行追加写的功能。WAL通过序列化的number去追踪数据的改变，其内部实现使用了AtimoicLong来保证线程安全。
 
 <div align="center">
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g34cf313slj20ne0g6gqi.jpg"/>
@@ -214,11 +218,11 @@ WAL是通过HLog实例进行实现的，HLog是使用append方法，对日志进
 </div>
 
 - HLogSyncer：日志同步刷写类，有定时刷写和内存溢值两种工作方式。
-- HLogRoller：Log的大小可以通过配置文件进行设置，默认是一个小时，每经过一个小时生成一个新的Log文件。当一定时间后，就有大量的日志文件。HLogRoller是在特定的时间滚动日志生成新的日志文件，避免了单个日志文件过大。根据序列化的number对比时间，删除旧的不需要的日志文件。
+- HLogRoller：Log的大小可以通过配置文件进行设置，默认是一个小时，每经过一个小时生成一个新的Log文件。当一定时间后，就有大量的日志文件。HLogRoller是在特定的时间滚动日志生成新的日志文件，避免了单个日志文件过大。根据序列化的number（Sequence Number）对比时间，删除旧的不需要的日志文件。
 
 ## 3.6 Compaction 解析
 
-Compaction 会从Region Store中选择一些HFile文件进行合并，合并就是指将一些待合并的文件中的K-V对进行排序重新生成一个新的文件取代原来的待合并的文件。由于系统不断地进行刷写会产生大量小文件，这样不利于数据查找。那么将这些小文件合并成一些大文件，这样使得查找过程的I/O次数减少，提高了查找效率。其中可以分为以下两类：
+Compaction 会从Region Store中选择一些HFile文件进行合并，合并就是指将一些待合并的文件中的K-V对进行排序重新生成一个新的文件取代原来的待合并的文件。**由于系统不断地进行刷写会产生大量小文件，这样不利于数据查找。那么将这些小文件合并成一些大文件，这样使得查找过程的I/O次数减少，提高了查找效率**。其中可以分为以下两类：
 
 <div align="center">
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g34l80ooxgj20og0h2n2o.jpg"/>
@@ -239,7 +243,9 @@ HBase中Compaction的触发时机的因素很多，最主要的有三种：
 
 数据存储(客户端)：
 
-提交之前会先请求Zookeeper来确定Meta表（元数据表）所在的Region Server的地址，再根据RowKey确定归属的Region Server，之后用户提交Put/Delete这样的请求，HBase客户端会将Put请求添加到本地的buffer中，符合一定的条件就会通过异步批量提交。HBase默认设置auto flush（自动刷写）为true，表示put请求会直接提交给服务器进行处理，用户可以设置auto flush为false，这样put请求会首先放入本地的buffer中，等到buffer的大小达到一定阈值（默认是2M）后再提交。
+提交之前会先请求Zookeeper来确定Meta表（元数据表）所在的Region Server的地址，再根据RowKey确定归属的Region Server，之后用户提交Put/Delete这样的请求，HBase客户端会将Put请求添加到本地的buffer中，符合一定的条件就会通过异步批量提交。
+
+HBase默认设置auto flush（自动刷写）为true，表示put请求会直接提交给服务器进行处理，用户可以设置auto flush为false，这样put请求会首先放入本地的buffer中，等到buffer的大小达到一定阈值（默认是2M）后再提交。
 
 <div align="center">
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g35hw8y2p1j20kb0ckq4j.jpg"/>
@@ -247,7 +253,7 @@ HBase中Compaction的触发时机的因素很多，最主要的有三种：
 
 数据存储（服务器）：
 
-当数据到达Region Server的某个Region后，首先获取RowLock（行锁），之后再日志和写入缓存，此时并不会同步日志，操作完释放行锁，随后再将同步（sync）到HDFS上，如果同步失败进行回滚操作将缓存中已写入的数据删除掉，代表插入失败。当缓存达到一定阈值（默认是64M）后，启动异步线程将数据刷写到硬盘上形成多个StoreFile，当StoreFile数量达到一定阈值后会触发合并操作。当单个StoreFile的大小达到一定大小的时候会触发一个split操作，将当前的Region切分为两个Region，再同步到Mater上，原有Region会下线，子Region会被Master分配到相应的Region Server上。
+当数据到达Region Server的某个Region后，首先获取RowLock（行锁），之后再写入日志和缓存，**持有行锁的时候并不会同步日志**，操作完释放RowLock（行锁），随后再将同步（sync）到HDFS上，如果同步失败进行回滚操作将缓存中已写入的数据删除掉，代表插入失败。当缓存达到一定阈值（默认是64M）后，启动异步线程将数据刷写到硬盘上形成多个StoreFile，当StoreFile数量达到一定阈值后会触发合并操作。当单个StoreFile的大小达到一定大小的时候会触发一个split操作，将当前的Region切分为两个Region，再同步到Master上，原有Region会下线，子Region会被Master分配到相应的Region Server上。
 
 <div align="center">
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g35igfraixj20ux0auwit.jpg"/>
@@ -277,14 +283,14 @@ HBase通过MemStore和WAL两种机制，实现数据顺序快速的插入，极�
 
 检索（获取）优化：
 
-HBase使用布隆过滤器来提高**随机读**的性能，布隆过滤器是列族级别的配置。HBase中的每个HFile都有对应的位数组，K-V在写入HFile时，会经过几个哈希函数的映射并写入对应的位数组里面。HFile中的位数组，就是布隆过滤器中存储的值。HFile越大位数组也会越大，太大就不适合放入内存中了，因此HFile将位数组以RowKey进行了拆分，一部分连续的RowKey使用一个位数组。因此HFile会有多个位数组，在查询的时候，首先会定位到某个位数组再将该位数组加载到内存中进行过滤就行，这样减少了内存的开支。
+HBase使用[布隆过滤器](https://zh.wikipedia.org/wiki/%E5%B8%83%E9%9A%86%E8%BF%87%E6%BB%A4%E5%99%A8)来提高**随机读**的性能，布隆过滤器是列族级别的配置。HBase中的每个HFile都有对应的位数组，K-V在写入HFile时，会经过几个哈希函数的映射并写入对应的位数组里面。HFile中的位数组，就是布隆过滤器中存储的值。HFile越大位数组也会越大，太大就不适合放入内存中了，因此HFile将位数组以RowKey进行了拆分，一部分连续的RowKey使用一个位数组。因此HFile会有多个位数组，在查询的时候，首先会定位到某个位数组再将该位数组加载到内存中进行过滤就行，这样减少了内存的开支。
 
 HBase中存在两种布隆过滤器：
 
 - Row：根据RowKey来过滤StoreFile，这种情况可以针对列族和列都相同，只有RowKey不同的情况；
 - RowCol：根据RowKey+ColumnQualifier（列描述符）来过滤StoreFile，这种情况是针对列族相同，列和RowKey不同的情况。
 
-# 特点
+# 五、特点
 
 - 容量大：HBase单表可以有百亿行、百万列，数据矩阵横向和纵向两个纬度所支持的数据量级都非常具有弹性；
 - 面向列：列是可以动态增加的，不需要指定列，面向列的存储和权限控制，并支持独立检索；
@@ -298,7 +304,7 @@ HBase中存在两种布隆过滤器：
   <img src="https://gitee.com/IvanLu1024/picts/raw/master/blog/hbase/b7cbe24fly1g35ju61jgaj20r00butcu.jpg"/>
 </div>
 
-# 和关系型数据库的对比
+# 六、和关系型数据库的对比
 
 区别：
 

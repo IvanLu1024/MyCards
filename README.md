@@ -48,7 +48,7 @@
 
 存储
 
-- [MySQL]()
+- [MySQL](https://github.com/IvanLu1024/MyCards/blob/master/notes/database.md)
 - [Redis](https://github.com/IvanLu1024/MyCards/blob/master/notes/redis.md)
 
 框架：

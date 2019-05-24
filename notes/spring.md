@@ -2,7 +2,7 @@
 
 - Spring
 
-Spring 框架就像一个家族，有众多衍生产品例如boot、security、jpa等。但它们的基础都是Spring的IOC和AOP，在此两者的基础上实现了其他延伸产品的高级功能。
+Spring 框架就像一个家族，有众多衍生产品例如boot、security、jpa等。但它们的基础都是Spring的[IOC](https://github.com/DuHouAn/Java-Notes/blob/master/Spring/01SpringIOC.md)和 [AOP](https://github.com/DuHouAn/Java-Notes/blob/master/Spring/02SpringAOP.md)，在此两者的基础上实现了其他延伸产品的高级功能。
 
 - Spring MVC
 
@@ -272,6 +272,21 @@ public class MybatisAutoConfiguration
 ```
 
 因为maven依赖的传递性，我们只要依赖starter就可以依赖到所有需要自动配置的类，实现开箱即用的功能。也体现出Springboot简化了Spring框架带来的大量XML配置以及复杂的依赖管理，让开发人员可以更加关注业务逻辑的开发。
+
+# 3. Spring Bean 的作用域
+
+- singleton：Spring 的默认作用域，容器里拥有唯一的Bean，适合无状态的Bean；
+- prototype：针对每个getBean请求，容器都会创建一个Bean，要谨慎使用，因为频繁地创建销毁Bean有很大的系统开销；
+
+> 以下三种仅针对于Web应用
+
+- request：会为每个Http 请求创建一个 Bean 实例
+- session：会为每个session创建一个 Bean 实例
+- globalSession：会为每个全局Http Session创建一个 Bean 实例，该作用域仅仅对Portlet规范有效
+
+# 4. Spring Bean的生命周期
+
+[查看详细](https://github.com/DuHouAn/Java-Notes/blob/master/Spring/05Spring%E4%B8%ADBean%E7%9A%84%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F.md)
 
 # 参考资料
 
